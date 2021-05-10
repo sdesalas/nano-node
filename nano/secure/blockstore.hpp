@@ -8,6 +8,7 @@
 #include <nano/lib/rocksdbconfig.hpp>
 #include <nano/secure/buffer.hpp>
 #include <nano/secure/common.hpp>
+#include <nano/secure/store/frontier_store.hpp>
 #include <nano/secure/versioning.hpp>
 
 #include <boost/endian/conversion.hpp>
@@ -626,6 +627,8 @@ class ledger_cache;
 class block_store
 {
 public:
+	block_store () :
+		frontier (frontier_store()) {};
 	virtual ~block_store () = default;
 	virtual void initialize (nano::write_transaction const &, nano::genesis const &, nano::ledger_cache &) = 0;
 	virtual void block_put (nano::write_transaction const &, nano::block_hash const &, nano::block const &) = 0;
@@ -645,12 +648,7 @@ public:
 	virtual nano::store_iterator<nano::block_hash, block_w_sideband> blocks_begin (nano::transaction const &) const = 0;
 	virtual nano::store_iterator<nano::block_hash, block_w_sideband> blocks_end () const = 0;
 
-	virtual void frontier_put (nano::write_transaction const &, nano::block_hash const &, nano::account const &) = 0;
-	virtual nano::account frontier_get (nano::transaction const &, nano::block_hash const &) const = 0;
-	virtual void frontier_del (nano::write_transaction const &, nano::block_hash const &) = 0;
-	virtual nano::store_iterator<nano::block_hash, nano::account> frontiers_begin (nano::transaction const &) const = 0;
-	virtual nano::store_iterator<nano::block_hash, nano::account> frontiers_begin (nano::transaction const &, nano::block_hash const &) const = 0;
-	virtual nano::store_iterator<nano::block_hash, nano::account> frontiers_end () const = 0;
+	const frontier_store & frontier;
 
 	virtual void account_put (nano::write_transaction const &, nano::account const &, nano::account_info const &) = 0;
 	virtual bool account_get (nano::transaction const &, nano::account const &, nano::account_info &) = 0;
@@ -732,7 +730,6 @@ public:
 	virtual void unchecked_for_each_par (std::function<void (nano::read_transaction const &, nano::store_iterator<nano::unchecked_key, nano::unchecked_info>, nano::store_iterator<nano::unchecked_key, nano::unchecked_info>)> const & action_a) const = 0;
 	virtual void pruned_for_each_par (std::function<void (nano::read_transaction const &, nano::store_iterator<nano::block_hash, std::nullptr_t>, nano::store_iterator<nano::block_hash, std::nullptr_t>)> const & action_a) const = 0;
 	virtual void blocks_for_each_par (std::function<void (nano::read_transaction const &, nano::store_iterator<nano::block_hash, block_w_sideband>, nano::store_iterator<nano::block_hash, block_w_sideband>)> const & action_a) const = 0;
-	virtual void frontiers_for_each_par (std::function<void (nano::read_transaction const &, nano::store_iterator<nano::block_hash, nano::account>, nano::store_iterator<nano::block_hash, nano::account>)> const & action_a) const = 0;
 	virtual void final_vote_for_each_par (std::function<void (nano::read_transaction const &, nano::store_iterator<nano::qualified_root, nano::block_hash>, nano::store_iterator<nano::qualified_root, nano::block_hash>)> const & action_a) const = 0;
 
 	virtual uint64_t block_account_height (nano::transaction const & transaction_a, nano::block_hash const & hash_a) const = 0;

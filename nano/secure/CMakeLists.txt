@@ -42,6 +42,8 @@ add_library(
   blockstore.hpp
   blockstore.cpp
   blockstore_partial.hpp
+  store/frontier_store.cpp
+  store/frontier_store.hpp
   buffer.hpp
   common.hpp
   common.cpp
