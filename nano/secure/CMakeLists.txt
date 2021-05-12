@@ -55,7 +55,13 @@ add_library(
   utility.cpp
   versioning.hpp
   versioning.cpp
-  working.hpp)
+  working.hpp
+  store/db_val.hpp
+  store/table_definitions.hpp
+  store/iterable.hpp
+  store/parallel_traversal.hpp
+  store/block_w_sideband.hpp
+  store/block_predecessor_set.hpp)
 
 target_link_libraries(
   secure

@@ -6,9 +6,15 @@
 #include <nano/lib/timer.hpp>
 #include <nano/secure/blockstore.hpp>
 #include <nano/secure/buffer.hpp>
+#include <nano/secure/store/block_predecessor_set.hpp>
+#include <nano/secure/store/db_val.hpp>
+#include <nano/secure/store/iterable.hpp>
+#include <nano/secure/store/parallel_traversal.hpp>
+#include <nano/secure/store/table_definitions.hpp>
 
 #include <crypto/cryptopp/words.h>
 
+#include <functional>
 #include <thread>
 
 #define release_assert_success(status)                 \
@@ -16,11 +22,6 @@
 	{                                                  \
 		release_assert (false, error_string (status)); \
 	}
-namespace
-{
-template <typename T>
-void parallel_traversal (std::function<void (T const &, T const &, bool const)> const & action);
-}
 
 namespace nano
 {
@@ -29,7 +30,7 @@ class block_predecessor_set;
 
 /** This base class implements the block_store interface functions which have DB agnostic functionality */
 template <typename Val, typename Derived_Store>
-class block_store_partial : public block_store
+class block_store_partial : public block_store, public iterable
 {
 public:
 	using block_store::block_exists;
@@ -800,18 +801,6 @@ protected:
 	nano::network_params network_params;
 	int const version{ 21 };
 
-	template <typename Key, typename Value>
-	nano::store_iterator<Key, Value> make_iterator (nano::transaction const & transaction_a, tables table_a, bool const direction_asc = true) const
-	{
-		return static_cast<Derived_Store const &> (*this).template make_iterator<Key, Value> (transaction_a, table_a, direction_asc);
-	}
-
-	template <typename Key, typename Value>
-	nano::store_iterator<Key, Value> make_iterator (nano::transaction const & transaction_a, tables table_a, nano::db_val<Val> const & key) const
-	{
-		return static_cast<Derived_Store const &> (*this).template make_iterator<Key, Value> (transaction_a, table_a, key);
-	}
-
 	nano::db_val<Val> block_raw_get (nano::transaction const & transaction_a, nano::block_hash const & hash_a) const
 	{
 		nano::db_val<Val> result;
@@ -869,83 +858,3 @@ protected:
 	virtual int status_code_not_found () const = 0;
 	virtual std::string error_string (int status) const = 0;
 };
-
-/**
- * Fill in our predecessors
- */
-template <typename Val, typename Derived_Store>
-class block_predecessor_set : public nano::block_visitor
-{
-public:
-	block_predecessor_set (nano::write_transaction const & transaction_a, nano::block_store_partial<Val, Derived_Store> & store_a) :
-		transaction (transaction_a),
-		store (store_a)
-	{
-	}
-	virtual ~block_predecessor_set () = default;
-	void fill_value (nano::block const & block_a)
-	{
-		auto hash (block_a.hash ());
-		auto value (store.block_raw_get (transaction, block_a.previous ()));
-		debug_assert (value.size () != 0);
-		auto type = store.block_type_from_raw (value.data ());
-		std::vector<uint8_t> data (static_cast<uint8_t *> (value.data ()), static_cast<uint8_t *> (value.data ()) + value.size ());
-		std::copy (hash.bytes.begin (), hash.bytes.end (), data.begin () + store.block_successor_offset (transaction, value.size (), type));
-		store.block_raw_put (transaction, data, block_a.previous ());
-	}
-	void send_block (nano::send_block const & block_a) override
-	{
-		fill_value (block_a);
-	}
-	void receive_block (nano::receive_block const & block_a) override
-	{
-		fill_value (block_a);
-	}
-	void open_block (nano::open_block const & block_a) override
-	{
-		// Open blocks don't have a predecessor
-	}
-	void change_block (nano::change_block const & block_a) override
-	{
-		fill_value (block_a);
-	}
-	void state_block (nano::state_block const & block_a) override
-	{
-		if (!block_a.previous ().is_zero ())
-		{
-			fill_value (block_a);
-		}
-	}
-	nano::write_transaction const & transaction;
-	nano::block_store_partial<Val, Derived_Store> & store;
-};
-}
-
-namespace
-{
-template <typename T>
-void parallel_traversal (std::function<void (T const &, T const &, bool const)> const & action)
-{
-	// Between 10 and 40 threads, scales well even in low power systems as long as actions are I/O bound
-	unsigned const thread_count = std::max (10u, std::min (40u, 10 * std::thread::hardware_concurrency ()));
-	T const value_max{ std::numeric_limits<T>::max () };
-	T const split = value_max / thread_count;
-	std::vector<std::thread> threads;
-	threads.reserve (thread_count);
-	for (unsigned thread (0); thread < thread_count; ++thread)
-	{
-		T const start = thread * split;
-		T const end = (thread + 1) * split;
-		bool const is_last = thread == thread_count - 1;
-
-		threads.emplace_back ([&action, start, end, is_last] {
-			nano::thread_role::set (nano::thread_role::name::db_parallel_traversal);
-			action (start, end, is_last);
-		});
-	}
-	for (auto & thread : threads)
-	{
-		thread.join ();
-	}
-}
-}
