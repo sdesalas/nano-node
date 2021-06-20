@@ -1,4 +1,4 @@
-FROM nanocurrency/nano-env:base
+FROM nano-ci:latest
 
 RUN apt-get install -yqq git
 

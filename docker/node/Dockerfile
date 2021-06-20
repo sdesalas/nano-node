@@ -1,4 +1,4 @@
-FROM nanocurrency/nano-env:gcc
+FROM nano-ci:gcc
 
 ARG NETWORK=live
 ARG TRAVIS_TAG=DEV_BUILD
