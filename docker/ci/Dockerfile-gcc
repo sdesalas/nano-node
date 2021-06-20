@@ -1,4 +1,4 @@
-FROM nano-ci:latest
+FROM nano-ci:base
 
 RUN apt-get install -yqq git
 
